@@ -53,8 +53,11 @@ with col1:
             weak_keys = get_weak_keys(st.session_state.logs)
             st.session_state.target_word = generate_problem(weak_keys)
             st.session_state.start_time = time.time()
-            # 入力欄をクリアするためにリラン
-            st.rerun()
+            
+            # --- ここが重要：入力欄を空にするためにセッションを操作 ---
+            st.session_state.typing_box = "" # key="typing_box" の中身を空にする
+            st.rerun() 
+
         else:
             st.error("Miss! Try exactly the same word.")
 
