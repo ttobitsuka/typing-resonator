@@ -1,60 +1,82 @@
 import streamlit as st
 import time
 import pandas as pd
+import plotly.express as px
 from logic.analyzer import get_weak_keys
 from logic.generator import generate_problem
 
-st.set_page_config(page_title="TypingResonator", layout="centered")
+# ページ設定
+st.set_page_config(page_title="TypingResonator", layout="wide")
 
-# --- Session State の初期化 ---
+# --- セッション状態の初期化 ---
 if 'logs' not in st.session_state:
-    st.session_state.logs = []  # 打鍵ログ：{key, latency, is_error}
+    st.session_state.logs = []
 if 'target_word' not in st.session_state:
     st.session_state.target_word = "streamlit"
 if 'start_time' not in st.session_state:
-    st.session_state.start_time = None
+    st.session_state.start_time = time.time()
 
+# --- タイトル・UI ---
 st.title("⌨️ TypingResonator")
-st.subheader("データサイエンスで苦手キーを克服する")
+st.markdown("---")
 
-# --- メインロジック ---
-target = st.session_state.target_word
-st.info(f"Problem: **{target}**")
+col1, col2 = st.columns([1, 1])
 
-# 入力フォーム（streamlit-keyup等を使うとよりリアルタイムになりますが、まずは標準機能で）
-user_input = st.text_input("Type here and press Enter:", key="typing_input")
+with col1:
+    st.subheader("Practice")
+    target = st.session_state.target_word
+    st.info(f"Type this: **{target}**")
 
-if user_input:
-    end_time = time.time()
-    
-    # 簡易的な速度計測（実際には1文字ずつの計測にアップグレード予定）
-    duration = end_time - st.session_state.start_time if st.session_state.start_time else 0
-    latency_per_char = duration / len(user_input) if len(user_input) > 0 else 0
-    
-    # 正誤判定
-    is_correct = user_input == target
-    
-    # ログの記録（各キーに対して記録するロジックのプロトタイプ）
-    for char in target:
-        st.session_state.logs.append({
-            "key": char,
-            "latency": latency_per_char,
-            "is_error": not is_correct
-        })
-    
-    if is_correct:
-        st.success("Perfect!")
-        # 次の問題へ（ここでgenerator.pyを呼び出す）
-        weak_keys = get_weak_keys(st.session_state.logs)
-        st.session_state.target_word = generate_problem(weak_keys)
-        st.session_state.start_time = time.time()
-        st.rerun()
+    # 入力フォーム（Enterで確定）
+    # スマホ入力でもバグりにくいよう、確定時に処理を走らせます
+    user_input = st.text_input("Input:", key="typing_box")
+
+    if user_input:
+        end_time = time.time()
+        duration = end_time - st.session_state.start_time
+        
+        # 1文字あたりの平均速度を計算
+        latency = duration / len(target) if len(target) > 0 else 0
+        is_correct = (user_input == target)
+
+        # ログに記録（各文字について正確性と速度を保存）
+        for char in target:
+            st.session_state.logs.append({
+                "key": char,
+                "latency": latency,
+                "is_error": not is_correct
+            })
+
+        if is_correct:
+            st.success(f"Excellent! ({duration:.2f}s)")
+            # 苦手キーを分析して次の問題を生成
+            weak_keys = get_weak_keys(st.session_state.logs)
+            st.session_state.target_word = generate_problem(weak_keys)
+            st.session_state.start_time = time.time()
+            # 入力欄をクリアするためにリラン
+            st.rerun()
+        else:
+            st.error("Miss! Try exactly the same word.")
+
+with col2:
+    st.subheader("Real-time Analysis")
+    if st.session_state.logs:
+        df = pd.DataFrame(st.session_state.logs)
+        
+        # キーごとの統計
+        stats = df.groupby('key').agg({'latency': 'mean', 'is_error': 'mean'}).reset_index()
+        
+        # 苦手度スコアの可視化 (速度とミス率を掛け合わせる)
+        stats['Weakness Score'] = stats['latency'] * (1 + stats['is_error'])
+        
+        fig = px.bar(stats, x='key', y='Weakness Score', 
+                     title="Key Weakness (Higher is worse)",
+                     color='is_error',
+                     color_continuous_scale='Reds')
+        st.plotly_chart(fig, use_container_width=True)
     else:
-        st.error("Miss! Try again.")
+        st.write("Start typing to see your data analysis!")
 
-# --- 分析セクション ---
-if st.session_state.logs:
-    st.divider()
-    st.write("### 📊 Your Weakness Analysis")
-    df = pd.DataFrame(st.session_state.logs)
-    st.dataframe(df.tail(10)) # 最新のログを表示
+# --- データ詳細 ---
+if st.checkbox("Show raw log data"):
+    st.table(pd.DataFrame(st.session_state.logs).tail(10))
