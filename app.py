@@ -6,8 +6,7 @@ from logic.analyzer import get_weak_keys
 from logic.generator import generate_problem
 
 # ページ設定
-st.set_page_config(page_title="TypingResonator", layout="wide")
-
+user_input = st.text_input("Input:", key="typing_box", value=st.session_state.get('typing_box_value', ''))
 # --- セッション状態の初期化 ---
 if 'logs' not in st.session_state:
     st.session_state.logs = []
@@ -49,14 +48,17 @@ with col1:
 
         if is_correct:
             st.success(f"Excellent! ({duration:.2f}s)")
-            # 苦手キーを分析して次の問題を生成
+            # 苦手キーを分析
             weak_keys = get_weak_keys(st.session_state.logs)
+            # 次の問題をセット
             st.session_state.target_word = generate_problem(weak_keys)
             st.session_state.start_time = time.time()
             
-            # --- ここが重要：入力欄を空にするためにセッションを操作 ---
-            st.session_state.typing_box = "" # key="typing_box" の中身を空にする
-            st.rerun() 
+            # --- ここが修正ポイント ---
+            # 直接 typing_box をいじるのではなく、valueに渡している変数を空にする
+            st.session_state['typing_box_value'] = ''
+            st.rerun()
+
 
         else:
             st.error("Miss! Try exactly the same word.")
